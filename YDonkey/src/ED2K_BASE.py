@@ -29,6 +29,10 @@ OP_GETSERVERLIST= 0x14
 OP_SERVERLIST   = 0x32
 OP_SERVERIDENT  = 0x41
 OP_OFFERFILES   = 0x15
+OP_SEARCH       = 0x16
+OP_SEARCHRESULT = 0x33
+OP_HELLO        = 0x01
+OP_HELLOANSWER  = 0x4C
 
 #Tags
 CT_NICK         = 0x01
@@ -41,6 +45,8 @@ CT_SERVERDESC   = 0x0b
 CT_FILENAME     = 0x31  #原为0x01
 CT_FILESIZE     = 0x32  #原为0x02
 CT_FILETYPE     = 0x33  #原为0x03
+CT_SOURCES      = 0x15
+CT_COMPLSRC     = 0x30
 
 #Flags
 FL_ZLIB         = 0x01
@@ -68,6 +74,19 @@ class Ed2k:
     port = None
     sock = None
     GUID = None
+    cnt_users = 100
+    cnt_files = 2000
+
+    server_name = "YH 1# ED2K Server"
+    server_desc = "Server Desc"
+
+    userlist    = {}
+    serverlist  = {}
+    filelist    = {}
+    filesrc     = {}
+    
+
+
     def __init__ (self, host, port):
         self.host = host
         self.port = port
@@ -99,7 +118,7 @@ class Ed2k:
                 buf = sock.recv(4096)
             except socket.error, e:
                 self.error(e,"连接中断")
-            print "【%s】%s 【from】 %s " % (ctime(),repr(buf),addr)
+#            print "【%s】%s 【from】 %s " % (ctime(),repr(buf),addr)
             self.parser(sock,buf,len(buf))
 #            print "ok"
 #            sock.send("hello ansewr")
@@ -157,14 +176,14 @@ class Ed2k:
         index += 2
         tags = struct.unpack("!I", buf[index:index+4])[0]
         index += 4
-        self.users[hash] = info
+        self.userlist[hash] = info
         info["ip"] = ip
         info["port"] = port
         for i in range(tags):
             tagcode = struct.unpack("!B", buf[index])[0]
             index += 1
             index += self.CtHandler[tagcode](self,buf[index:],hash)
-        print self.users[hash]
+        print self.userlist[hash]
         sock.send(self.pack_ED2K(self.op_ServerMessage("I am Server Msg!")))
         sock.send(self.pack_ED2K(self.op_ServerStatus()))
 #        print repr(self.pack_ED2K(self.op_ServerStatus()))
@@ -181,10 +200,10 @@ class Ed2k:
         
     def hServerStatus(self,sock,buf):
         index = 0
-        users = struct.unpack("!I",buf[index:index+4])[0]
+        cnt_users = struct.unpack("!I",buf[index:index+4])[0]
         index += 4
-        files = struct.unpack("!I",buf[index:index+4])[0]
-        print "Server users : %d  And files : %d" %(users,files)
+        cnt_files = struct.unpack("!I",buf[index:index+4])[0]
+        print "Server users : %d  And files : %d" %(cnt_users,cnt_files)
     def hIDChange(self,sock,buf):
         newid = struct.unpack("!I",buf[0:4])
         print "NewID : %d" % newid
@@ -223,14 +242,22 @@ class Ed2k:
         index += 2
         tags = struct.unpack("!I", buf[index:index+4])[0]
         index += 4
-        self.files[hash] = info
+        self.filelist[hash] = info
         info["ip"] = ip
         info["port"] = port
         for i in range(tags):
             tagcode = struct.unpack("!B", buf[index])[0]
             index += 1
             index += self.CtHandler[tagcode](self,buf[index:],hash)
-        print self.files[hash]
+        print self.filelist[hash]
+    def hSearch(self,sock,buf):
+        index = 0
+        len = struct.unpack("!H",buf[index:index+2])[0]
+        index += 2
+        fmt = "!%ds" % len
+        expr = struct.unpack(fmt,buf[index:index+len])[0]
+        print "SearchExpr :: %s" % expr
+    def hSearchResult(self,sock,buf):
         pass
 
 
@@ -241,23 +268,23 @@ class Ed2k:
         index += 2
         fmt = "!%ds" % len
         nick = struct.unpack(fmt,buf[index:index+len])[0]
-        self.users[hash]["nick"] = nick
+        self.userlist[hash]["nick"] = nick
         return index+len
     def hVERSION(self,buf,hash):
         ver = struct.unpack("!B", buf[0])[0]
-        self.users[hash]["version"] = ver
+        self.userlist[hash]["version"] = ver
         return 1
     def hPORT(self,buf,hash):
         port = struct.unpack("!H", buf[0:2])[0]
-        self.users[hash]["port"] = port
+        self.userlist[hash]["port"] = port
         return 2
     def hMULEVERSION(self,buf,hash):
         mul = struct.unpack("!I", buf[0:4])[0]
-        self.users[hash]["muleversion"] = mul
+        self.userlist[hash]["muleversion"] = mul
         return 4
     def hFLAGS(self,buf,hash):
         flags = struct.unpack("!B", buf[0])[0]
-        self.users[hash]["flags"] = flags
+        self.userlist[hash]["flags"] = flags
         return 1
     def hSERVERNAME(self,buf,hash):
         index = 0
@@ -281,11 +308,11 @@ class Ed2k:
         index += 2
         fmt = "!%ds" % len
         str = struct.unpack(fmt,buf[index:index+len])[0]
-        self.files[hash]["name"] = str
+        self.filelist[hash]["name"] = str
         return index+len
     def hFILESIZE(self,buf,hash):
         size = struct.unpack("!I",buf[0:4])[0]
-        self.files[hash]["size"] = size
+        self.filelist[hash]["size"] = size
         return 4
     def hFILETYPE(self,buf,hash):
         index = 0
@@ -293,9 +320,16 @@ class Ed2k:
         index += 2
         fmt = "!%ds" % len
         str = struct.unpack(fmt,buf[index:index+len])[0]
-        self.files[hash]["type"] = str
+        self.filelist[hash]["type"] = str
         return index+len
-
+    def hSOURCES(self,buf,hash):
+        src = struct.unpack("!I",buf[0:4])[0]
+        self.filelist[hash]["src"] = src
+        return 4
+    def hCOMPLSRC(self,buf,hash):
+        complsrc = struct.unpack("!I",buf[0:4])[0]
+        self.filelist[hash]["somplsrc"] = complsrc
+        return 4
 
     #Tools
     def user_hash(self):
@@ -341,6 +375,12 @@ class Ed2k:
     def ct_FILETYPE(self,type):
         fmt = "BH%ds" % len(type)
         return [fmt, CT_NICK, len(type),type]
+    def ct_SOURCES(self,src):
+        fmt = "BI"
+        return [fmt, CT_FILESIZE, src]
+    def ct_COMPLSRC(self,complsrc):
+        fmt = "BI"
+        return [fmt, CT_FILESIZE, complsrc]
     
     #OP Code To Handler
     OpHandler ={OP_LOGINREQUEST:hLoginRequest,
@@ -350,7 +390,9 @@ class Ed2k:
                 OP_GETSERVERLIST:hGetServerList,
                 OP_SERVERLIST:hServerList,
                 OP_SERVERIDENT:hServerIdent,
-                OP_OFFERFILES:hOfferFiles}
+                OP_OFFERFILES:hOfferFiles,
+                OP_SEARCH:hSearch,
+                OP_SEARCHRESULT:hSearchResult}
     #CT To Handler
     CtHandler ={CT_NICK:hNICK,
                 CT_VERSION:hVERSION,
@@ -361,4 +403,6 @@ class Ed2k:
                 CT_SERVERDESC:hSERVERDESC,
                 CT_FILENAME:hFILENAME,
                 CT_FILESIZE:hFILESIZE,
-                CT_FILETYPE:hFILETYPE}
+                CT_FILETYPE:hFILETYPE,
+                CT_SOURCES:hSOURCES,
+                CT_COMPLSRC:hCOMPLSRC}

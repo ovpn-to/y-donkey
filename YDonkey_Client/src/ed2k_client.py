@@ -26,9 +26,9 @@ ed = ED2K.Ed2kClient()
 
 while 1:
     t_login = threading.Thread(target=ed.login,
-            args=[("no1.eserver.emule.org.cn",8080)])
+            #args=[("no1.eserver.emule.org.cn",8080)])
             #args=[("193.42.213.70",6000)])
-            #args=[("localhost", SPORT)])
+            args=[("localhost", SPORT)])
     t_login.start()
     t_login.join()
 

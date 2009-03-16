@@ -14,13 +14,7 @@ class Ed2kServer(Ed2k):
     """
     Ed2kServer
     """
-    sock = None
-    users = {}
-    files = {}
-    cnt_users = 100
-    cnt_files = 2000
-    server_name = "YH 1# ED2K Server"
-    server_desc = "Server Desc"
+    
     def __init__ (self, host='', port=SPORT):
         Ed2k.__init__(self,host,port)        
 
@@ -67,23 +61,42 @@ class Ed2kServer(Ed2k):
 #        print li
 #        return apply(struct.pack,(fmt,) + tuple(li))
         return li
-        
+    def op_SearchResult(self,hash,ip,port,name,size,type,src,complsrc):
+        fmt = "!BI16B4sHI"
+        li = [OP_SEARCHRESULT]
+        li.extend(hash)
+        li.append(socket.inet_aton(ip))
+        li.append(port)
+        li.append(5)
+
+        buf = self.ct_FILENAME(name)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_FILESIZE(size)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_FILETYPE(type)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_SOURCES(src)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_COMPLSRC(complsrc)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        li.append(fmt)
+#        print li
+#        return apply(struct.pack,(fmt,) + tuple(li))
+        return li
 class Ed2kClient(Ed2k):
-    sock = None
-
-    serverlist = {}
-
-    ""
     def __init__ (self, host = '', port = CPORT ):
         Ed2k.__init__(self,host,port)
 
-
-
-
-
-
-
-    ""
     def login(self,addr):
         print "%s login!" % threading.currentThread().getName()
 
@@ -102,11 +115,12 @@ class Ed2kClient(Ed2k):
             try:
 #                sleep(10)
                 buf = sock.recv(1024)
-                print "recv %s" %repr(buf)
+#                print "recv %s" %repr(buf)
 #                print "recv: %s" % repr(buf)
                 self.parser(sock,buf,len(buf))
-#                self.updateServerInfo(sock)
+                self.updateServerInfo(sock)
                 self.offerFile(sock)
+                self.search(sock,"searchexpr")
             except socket.error, e:
                 self.error(e, "linkage interrupt")
             
@@ -119,9 +133,11 @@ class Ed2kClient(Ed2k):
     ""
     def offerFile(self,sock):
         sock.send(self.pack_ED2K(self.op_OfferFiles(self.GUID,"filename", 1000, "TXT")))
-        
+
+    def search(self,sock,expr):
+        sock.send(self.pack_ED2K(self.op_Search(expr)))
     ##OP Codes Packs
-    ""
+    
     def op_LoginRequset(self):
         fmt = "!B16B4sHI"
         li = [OP_LOGINREQUEST]
@@ -183,9 +199,18 @@ class Ed2kClient(Ed2k):
         fmt += buf[0]
         li.extend(buf[1:])
 
+        li.append(fmt)
+#        print li
+#        return apply(struct.pack,(fmt,) + tuple(li))
+        return li
+
+    def op_Search(self,expr):
+        fmt = "!BH%ds" % len(expr)
+        li = [OP_SEARCH,len(expr),expr]
 
         li.append(fmt)
 #        print li
 #        return apply(struct.pack,(fmt,) + tuple(li))
         return li
+#    def op_Hello
 
