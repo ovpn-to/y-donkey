@@ -6,7 +6,25 @@ if __name__ == "__main__":
     print "Hello";
 
 import hashlib
-passwd = 'mygreatpasswd'
-print hashlib.new('md4', passwd.encode('utf-16le')).hexdigest().upper()
+#passwd = 'hello'
+#print hashlib.new('md4').hexdigest().upper()
 
+md4 = hashlib.new("md4")
+
+f = open("1.pdf","rb")
+while 1:
+    date = f.read(9280000)
+    if not date:break
+    md4.update(date)
+f.close
+#print date
+
+
+#md4.update("hello")
+
+
+print md4.block_size
+print md4.digest_size
+print repr(md4.digest())
+print md4.hexdigest()
 
