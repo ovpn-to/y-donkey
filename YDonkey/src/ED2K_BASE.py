@@ -84,7 +84,8 @@ class Ed2k:
     serverlist  = {}
     filelist    = {}
     filesrc     = {}
-    
+
+
 
 
     def __init__ (self, host, port):

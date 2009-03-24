@@ -126,11 +126,17 @@ class Ed2kClient(Ed2k):
             
 
 
-    ""
+
     def updateServerInfo(self,sock):
         sock.send(self.pack_ED2K(self.op_GetServerList()))
 
-    ""
+
+    def initFileTable(self):
+        ShareFolder = "d:\download"
+        for root,dirs,files in os.walk(ShareFolder):
+            for file in files:
+                print file
+        pass
     def offerFile(self,sock):
         sock.send(self.pack_ED2K(self.op_OfferFiles(self.GUID,"filename", 1000, "TXT")))
 

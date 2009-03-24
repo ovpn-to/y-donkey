@@ -7,16 +7,37 @@ if __name__ == "__main__":
 
 import sqlite3
 
-conn = sqlite3.connect(':memory:')
+initSQLs=[ "create table IF NOT EXISTS files(hash text not null primary key,\
+                                name text not null,\
+                                src integer not null default 0,\
+                                complsrc integer not null default 0,\
+                                type text)",
+            "create table IF NOT EXISTS users(hash text not null primary key,\
+                                name text not null,\
+                                version text not null,\
+                                port integer not null,\
+                                mulversion text,\
+                                flag text)",
+            "create table IF NOT EXISTS servers(hash text not null primary key,\
+                                name text not null,\
+                                desc text)"]
+
+conn = sqlite3.connect('database')
 
 c = conn.cursor()
 
-c.execute('create table files (hash text,name text,src integer)')
-c.execute('insert into files values("DAFDFSDGSDG","dsadsadas",10)')
 
+for i in initSQLs:
+    c.execute(i)
+
+c.execute('insert into files(hash,name,src) values("DAFDFSDGVDG","dsadsadas",10)')
+c.execute('insert into files(hash,name) values("DAFDFSDGSDG","dsadsadas")')
+
+conn.commit()
 c.execute('select * from files')
 for row in c:
-    print row
+    for i in row:
+        print i
 
 
 # We can also close the cursor if we are done with it
