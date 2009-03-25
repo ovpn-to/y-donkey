@@ -3,8 +3,11 @@
 #### ED2K Lib ####
 
 import struct
+import os
+import hashlib
 
 from ED2K_BASE import *
+
 __author__ = "qianjin"
 __date__ = "$2009-2-26 10:26:58$"
 __all__ = ["Ed2kServer","Ed2kClient","Ed2k"]
@@ -93,6 +96,21 @@ class Ed2kServer(Ed2k):
 #        print li
 #        return apply(struct.pack,(fmt,) + tuple(li))
         return li
+
+    def op_FileName(self,hash,name):
+        fmt = "!B16HI%ds" % len(name)
+        li = [OP_FILENAME,hash,len(name),name]
+        li.append(fmt)
+        return li
+    def op_FileDesc(self,rating,comment):
+        fmt = "!BHI%ds" % len(comment)
+        li = [OP_FILEDESC,rating,len(comment),comment]
+        li.append(fmt)
+        return li
+    def op_FileStatus(self,hash,partmap):
+        pass
+
+
 class Ed2kClient(Ed2k):
     def __init__ (self, host = '', port = CPORT ):
         Ed2k.__init__(self,host,port)
@@ -132,13 +150,29 @@ class Ed2kClient(Ed2k):
 
 
     def initFileTable(self):
-        ShareFolder = "d:\download"
+        ShareFolder = "d:\download\\"
         for root,dirs,files in os.walk(ShareFolder):
             for file in files:
-                print file
+                finfo = self.path2file(ShareFolder,file)
+                self.filelist[finfo["hash"]] = finfo
+
         pass
+
+    def path2file(self,folder,file):
+        md4 = hashlib.new("md4")
+        fd = open(folder+file)
+        data = fd.read()
+        md4.update(data)
+        hash = md4.digest()
+        info = {"hash":hash,"name":file,"size":len(data),"type":"TXT"}
+        fd.close()
+        return info
+
     def offerFile(self,sock):
-        sock.send(self.pack_ED2K(self.op_OfferFiles(self.GUID,"filename", 1000, "TXT")))
+        for file in self.filelist:
+            ft = self.filelist[file]
+#            print self.op_OfferFiles(ft["hash"],ft["name"],ft["size"],ft["type"])
+            sock.send(self.pack_ED2K(self.op_OfferFiles(ft["hash"],ft["name"],ft["size"],ft["type"])))
 
     def search(self,sock,expr):
         sock.send(self.pack_ED2K(self.op_Search(expr)))
@@ -217,6 +251,18 @@ class Ed2kClient(Ed2k):
         li.append(fmt)
 #        print li
 #        return apply(struct.pack,(fmt,) + tuple(li))
+        return li
+    def op_ReqFile(self,hash):
+        fmt = "!B16H"
+        li = [OP_REQFILE]
+        li.extend(hash)
+        li.append(fmt)
+        return li
+    def op_SetReqFileID(self,hash):
+        fmt = "!B16H"
+        li = [OP_SETREQFILEID]
+        li.extend(hash)
+        li.append(fmt)
         return li
 #    def op_Hello
 

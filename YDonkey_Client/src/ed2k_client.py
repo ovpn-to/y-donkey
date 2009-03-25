@@ -17,9 +17,9 @@ from ED2K_BASE import *
     
 
 ed = ED2K.Ed2kClient()
-#t_listen = threading.Thread(target = ed.listen);
-#t_listen.setDaemon(True)
-#t_listen.start()
+t_listen = threading.Thread(target = ed.listen);
+t_listen.setDaemon(True)
+t_listen.start()
 
 #print repr(ed.op_LoginRequset("goof"))
 

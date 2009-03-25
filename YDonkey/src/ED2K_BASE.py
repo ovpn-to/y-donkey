@@ -33,6 +33,20 @@ OP_SEARCH       = 0x16
 OP_SEARCHRESULT = 0x33
 OP_HELLO        = 0x01
 OP_HELLOANSWER  = 0x4C
+OP_REQFILE      = 0x58
+OP_FILENAME     = 0x59
+OP_FILEDESC     = 0x61
+OP_REQFILE_STATUS   = 0x50
+OP_REQFILE_NOFILE   = 0x48
+OP_REQHASHSET   = 0x51
+OP_HASHSET      = 0x52
+OP_STARTUPLOADREQ   = 0x54
+OP_ACCEPTUPLOADREQ  = 0x5c
+OP_QUEUERANKING     = 0x5c
+OP_REQCHUNKS    = 0x47
+OP_SENDINGCHUNK = 0x46
+OP_CANCELTRANSFER   = 0x56
+OP_SETREQFILEID = 0x4f
 
 #Tags
 CT_NICK         = 0x01
@@ -243,6 +257,7 @@ class Ed2k:
         index += 2
         tags = struct.unpack("!I", buf[index:index+4])[0]
         index += 4
+#        print repr(hash)
         self.filelist[hash] = info
         info["ip"] = ip
         info["port"] = port
