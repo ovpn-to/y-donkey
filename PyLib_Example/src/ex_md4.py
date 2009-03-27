@@ -21,6 +21,7 @@ f.close
 
 
 #md4.update("hello")
+095d3989c42f1b124fa59cee5d206d4a
 
 
 print md4.block_size

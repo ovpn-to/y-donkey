@@ -15,7 +15,7 @@ print struct.unpack("!H4sbB", buffer)
 print
 
 # 计算转换的结构字节数
-print struct.calcsize("!B16B4sHIBH4sBBBHBIBB") #转换网络字节序
+print struct.calcsize("!BI16sIHIBH28sBIBH3s16sIHIBH28sBIBH3s16sIHIBH28sBIBH3s16sIHIBH28sBIBH3s16sIHIBH28sBIBH3s16sIHIBH28sBIBH3s16sIHIBH28sBIBH3s16sIHIBH28sBIBH3s16sIHIBH28sBIBH3s16sIHIBH28sBIBH3s") #转换网络字节序
 print struct.calcsize("=B16B4sHIBH4sBBBHBIBB") #保持原来字节序
 print struct.calcsize("B16B4sHIBH4sBBBHBIBB")  #自动对齐数据
 print

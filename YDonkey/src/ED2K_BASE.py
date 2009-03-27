@@ -13,6 +13,7 @@ import ctypes
 import random
 import struct
 import sys
+import re
 
 
 #Protocol Code
@@ -31,7 +32,7 @@ OP_SERVERIDENT  = 0x41
 OP_OFFERFILES   = 0x15
 OP_SEARCH       = 0x16
 OP_SEARCHRESULT = 0x33
-OP_HELLO        = 0x01
+OP_HELLO        = 0x03  #原为0x01
 OP_HELLOANSWER  = 0x4C
 OP_REQFILE      = 0x58
 OP_FILENAME     = 0x59
@@ -47,6 +48,8 @@ OP_REQCHUNKS    = 0x47
 OP_SENDINGCHUNK = 0x46
 OP_CANCELTRANSFER   = 0x56
 OP_SETREQFILEID = 0x4f
+
+
 
 #Tags
 CT_NICK         = 0x01
@@ -83,6 +86,7 @@ FT_ED2K_PROGRAM = "Pro"
 
 
 
+
 class Ed2k:
     host = ''
     port = None
@@ -98,7 +102,7 @@ class Ed2k:
     serverlist  = {}
     filelist    = {}
     filesrc     = {}
-
+    file2user   = {}
 
 
 
@@ -107,9 +111,17 @@ class Ed2k:
         self.port = port
         self.GUID = self.user_hash()
     def listen(self):
+        th = threading.Thread(target = self.__listen);
+        th.setName("Thread<listen>")
+        th.start()
+    def __listen(self):
+        """
+        TODO:加入异常处理
+        """
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(("0.0.0.0", self.port))
+        self.sock.bind(("localhost", self.port))
         self.sock.listen(5)
+        print "listen on %d" % self.port
         while 1:
             infds, outfds, errfds = select.select([self.sock, ], [], [], 5)
             if len(infds) != 0:
@@ -191,14 +203,15 @@ class Ed2k:
         index += 2
         tags = struct.unpack("!I", buf[index:index+4])[0]
         index += 4
-        self.userlist[hash] = info
         info["ip"] = ip
         info["port"] = port
+        info["hash"] = hash
+        self.userlist[hash] = info
         for i in range(tags):
             tagcode = struct.unpack("!B", buf[index])[0]
             index += 1
             index += self.CtHandler[tagcode](self,buf[index:],hash)
-        print self.userlist[hash]
+        print "userlist[hash] : ",self.userlist[hash]
         sock.send(self.pack_ED2K(self.op_ServerMessage("I am Server Msg!")))
         sock.send(self.pack_ED2K(self.op_ServerStatus()))
 #        print repr(self.pack_ED2K(self.op_ServerStatus()))
@@ -245,39 +258,191 @@ class Ed2k:
             tagcode = struct.unpack("!B", buf[index])[0]
             index += 1
             index += self.CtHandler[tagcode](self,buf[index:],hash)
-        print self.serverlist[hash]
+        print "ServerIdent : ",self.serverlist[hash]
     def hOfferFiles(self,sock,buf):
-        info = {}
+#        print "hOfferFiles"
+        
         index = 0
-        hash = struct.unpack("!16s",buf[index:index+16])[0]
-        index +=16
-        ip = socket.inet_ntoa(struct.unpack("!4s", buf[index:index+4])[0])
-        index += 4
-        port = struct.unpack("!H", buf[index:index+2])[0]
-        index += 2
-        tags = struct.unpack("!I", buf[index:index+4])[0]
-        index += 4
-#        print repr(hash)
-        self.filelist[hash] = info
-        info["ip"] = ip
-        info["port"] = port
-        for i in range(tags):
-            tagcode = struct.unpack("!B", buf[index])[0]
-            index += 1
-            index += self.CtHandler[tagcode](self,buf[index:],hash)
-        print self.filelist[hash]
+        cnt = struct.unpack("!I",buf[index:index+4])[0]
+        index +=4
+        for i in range(cnt):
+            info = {}
+            host = {}
+            hash = struct.unpack("!16s",buf[index:index+16])[0]
+            index +=16
+            ip = struct.unpack("!4s", buf[index:index+4])[0]
+            index += 4
+            port = struct.unpack("!H", buf[index:index+2])[0]
+            index += 2
+            tags = struct.unpack("!I", buf[index:index+4])[0]
+            index += 4
+    #        print repr(hash)
+            info["hash"] = hash
+            info["ip"] = ip
+            info["port"] = port
+#            host["ip"] = ip
+#            host["port"] = port
+#            if hash in self.file2user:
+#
+            if hash in self.filelist :
+#                print type(self.filelist[hash]["src"])
+                self.filelist[hash]["src"] +=1
+                self.filelist[hash]["complsrc"] +=1
+            else:
+                info["src"] = int(1)
+                info["complsrc"] = int(1)
+                self.filelist[hash] = info
+
+#            print self.filelist[hash]
+
+            for i in range(tags):
+                tagcode = struct.unpack("!B", buf[index])[0]
+                index += 1
+                index += self.CtHandler[tagcode](self,buf[index:],hash)
+#            print self.filelist[hash]
+#        for file in self.filelist:
+#            print self.filelist[file]
     def hSearch(self,sock,buf):
         index = 0
+        relt = []
         len = struct.unpack("!H",buf[index:index+2])[0]
         index += 2
         fmt = "!%ds" % len
         expr = struct.unpack(fmt,buf[index:index+len])[0]
-        print "SearchExpr :: %s" % expr
+        for file in self.filelist:
+#            if self.filelist[file]["name"] == expr :
+            m = re.match(expr, self.filelist[file]["name"])
+            if m :
+                relt.append(file)
+                print "match search: ",m.group()
+        sock.send(self.pack_ED2K(self.op_SearchResult(relt)))
+#        print "SearchExpr :: %s" % expr
     def hSearchResult(self,sock,buf):
+        index = 0
+        cnt = struct.unpack("!I",buf[index:index+4])[0]
+        index +=4
+        for i in range(cnt):
+            info = {}
+            hash = struct.unpack("!16s",buf[index:index+16])[0]
+            index +=16
+            ip = struct.unpack("!4s", buf[index:index+4])[0]
+            index += 4
+            port = struct.unpack("!H", buf[index:index+2])[0]
+            index += 2
+#            print repr(ip),port
+            tags = struct.unpack("!I", buf[index:index+4])[0]
+            index += 4
+    #        print repr(hash)
+            info["hash"] = hash
+            info["ip"] = ip
+            info["port"] = port
+
+            if hash in self.filelist :
+#                print type(self.filelist[hash]["src"])
+                self.filelist[hash]["src"] +=1
+                self.filelist[hash]["complsrc"] +=1
+            else:
+                info["src"] = int(1)
+                info["complsrc"] = int(1)
+                self.filelist[hash] = info
+
+            for i in range(tags):
+                tagcode = struct.unpack("!B", buf[index])[0]
+                index += 1
+                index += self.CtHandler[tagcode](self,buf[index:],hash)
+            print "search relt: ",self.filelist[hash]
+        pass
+    def h_ReqFile(self,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+        print hash
+    def h_FileName(self,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+        len = struct.unpack("!I",buf[index:index+4])[0]
+        index += 4
+        fmt = "!%ds" % len
+        name = struct.unpack(fmt,buf[index:index+len])[0]
+    def h_FileDesc(self,sock,buf):
+        index = 0
+        rating = struct.unpack("!B",buf[index:index+1])[0]
+        index +=1
+        len = struct.unpack("!I",buf[index:index+4])[0]
+        index += 4
+        fmt = "!%ds" % len
+        comment = struct.unpack(fmt,buf[index:index+len])[0]
+    def h_SetReqFileID(self,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+    def h_ReqFile_Status(self,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+        count = struct.unpack("!B",buf[index:index+2])[0]
+        index +=2
+#        for i in range(count):
+    def h_ReqFile_NoFile(self,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+        pass
+    def h_ReqHashSet(self,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+        pass
+    def h_HashSet(self,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+        cnt = struct.unpack("!B",buf[index:index+2])[0]
+        index +=2
+    def h_StartUploadReq(self,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+    def h_AcceptUploadReq(self,sock,buf):
+        pass
+    def h_QueueRanking(self,sock,buf):
+        index = 0
+        ranking = struct.unpack("!I",buf[index:index+4])[0]
+        index +=4
+        pass
+    def h_ReqChunks(selfm,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+        begins = []
+        ends = []
+        for i in range(3):
+            begin = struct.unpack("!16s",buf[index:index+4])[0]
+            index +=4
+            begins.append(begin)
+        for i in range(3):
+            end = struct.unpack("!16s",buf[index:index+4])[0]
+            index +=4
+            begins.append(end)
+        pass
+    def h_SendingChunk(self,sock,buf):
+        index = 0
+        hash = struct.unpack("!16s",buf[index:index+16])[0]
+        index +=16
+        begin = struct.unpack("!16s",buf[index:index+4])[0]
+        index +=4
+        end = struct.unpack("!16s",buf[index:index+4])[0]
+        index +=4
+        fmt = "!%ds" % (end-begin)
+        data = struct.unpack(fmt,buf[index:index+end-begin])[0]
+    def h_CancelTransfer(self,sock,buf):
         pass
 
 
-    #CT Code Handler
+    """
+    CT Code Handler
+    """
     def hNICK(self,buf,hash):
         index = 0
         len = struct.unpack("!H", buf[index:index+2])[0]
@@ -354,10 +519,13 @@ class Ed2k:
             li.append(random.randint(0,255))
         li[5] = 14
         li[14] = 111
-        return li
+
+#        print li
+        return apply(struct.pack,("16B",) + tuple(li))
     def client_hash(self,ip):
         tID = socket.inet_aton(ip)
         ID = struct.unpack("=I",tID)[0]
+#        print "client hash"ID
         return ID
 
     ##Tags
@@ -390,7 +558,7 @@ class Ed2k:
         return [fmt, CT_FILESIZE, size]
     def ct_FILETYPE(self,type):
         fmt = "BH%ds" % len(type)
-        return [fmt, CT_NICK, len(type),type]
+        return [fmt, CT_FILETYPE, len(type),type]
     def ct_SOURCES(self,src):
         fmt = "BI"
         return [fmt, CT_FILESIZE, src]
@@ -408,7 +576,21 @@ class Ed2k:
                 OP_SERVERIDENT:hServerIdent,
                 OP_OFFERFILES:hOfferFiles,
                 OP_SEARCH:hSearch,
-                OP_SEARCHRESULT:hSearchResult}
+                OP_SEARCHRESULT:hSearchResult,
+                OP_REQFILE:h_ReqFile,
+                OP_FILENAME:h_FileName,
+                OP_FILEDESC:h_FileDesc,
+                OP_SETREQFILEID:h_SetReqFileID,
+                OP_REQFILE_STATUS:h_ReqFile_Status,
+                OP_REQFILE_NOFILE:h_ReqFile_NoFile,
+                OP_REQHASHSET:h_ReqHashSet,
+                OP_HASHSET:h_HashSet,
+                OP_STARTUPLOADREQ:h_StartUploadReq,
+                OP_ACCEPTUPLOADREQ:h_AcceptUploadReq,
+                OP_QUEUERANKING:h_QueueRanking,
+                OP_REQCHUNKS:h_ReqChunks,
+                OP_SENDINGCHUNK:h_SendingChunk,
+                OP_CANCELTRANSFER:h_CancelTransfer}
     #CT To Handler
     CtHandler ={CT_NICK:hNICK,
                 CT_VERSION:hVERSION,
