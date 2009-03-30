@@ -184,7 +184,9 @@ class Ed2kClient(Ed2k):
         self.__search(self.sock,expr)
     def __search(self,sock,expr):
         sock.send(self.pack_ED2K(self.op_Search(expr)))
-        
+
+    def download(self,file):
+        pass
         
         
     """

@@ -13,6 +13,7 @@ import ctypes
 import random
 import struct
 import sys
+from struct import unpack
 import re
 
 
@@ -206,11 +207,14 @@ class Ed2k:
         info["ip"] = ip
         info["port"] = port
         info["hash"] = hash
-        self.userlist[hash] = info
+        
         for i in range(tags):
             tagcode = struct.unpack("!B", buf[index])[0]
             index += 1
-            index += self.CtHandler[tagcode](self,buf[index:],hash)
+            relt = self.CtHandler[tagcode](self,buf[index:])
+            index += relt[0]
+            info[relt[1]] = relt[2]
+        self.userlist[hash] = info
         print "userlist[hash] : ",self.userlist[hash]
         sock.send(self.pack_ED2K(self.op_ServerMessage("I am Server Msg!")))
         sock.send(self.pack_ED2K(self.op_ServerStatus()))
@@ -251,13 +255,16 @@ class Ed2k:
         index += 2
         tags = struct.unpack("!I", buf[index:index+4])[0]
         index += 4
-        self.serverlist[hash] = info
+        
         info["ip"] = ip
         info["port"] = port
         for i in range(tags):
             tagcode = struct.unpack("!B", buf[index])[0]
             index += 1
-            index += self.CtHandler[tagcode](self,buf[index:],hash)
+            relt = self.CtHandler[tagcode](self,buf[index:])
+            index += relt[0]
+            info[relt[1]] = relt[2]
+        self.serverlist[hash] = info
         print "ServerIdent : ",self.serverlist[hash]
     def hOfferFiles(self,sock,buf):
 #        print "hOfferFiles"
@@ -298,7 +305,9 @@ class Ed2k:
             for i in range(tags):
                 tagcode = struct.unpack("!B", buf[index])[0]
                 index += 1
-                index += self.CtHandler[tagcode](self,buf[index:],hash)
+                relt = self.CtHandler[tagcode](self,buf[index:])
+                index += relt[0]
+                info[relt[1]] = relt[2]
 #            print self.filelist[hash]
 #        for file in self.filelist:
 #            print self.filelist[file]
@@ -310,7 +319,6 @@ class Ed2k:
         fmt = "!%ds" % len
         expr = struct.unpack(fmt,buf[index:index+len])[0]
         for file in self.filelist:
-#            if self.filelist[file]["name"] == expr :
             m = re.match(expr, self.filelist[file]["name"])
             if m :
                 relt.append(file)
@@ -332,25 +340,19 @@ class Ed2k:
 #            print repr(ip),port
             tags = struct.unpack("!I", buf[index:index+4])[0]
             index += 4
-    #        print repr(hash)
             info["hash"] = hash
             info["ip"] = ip
             info["port"] = port
 
-            if hash in self.filelist :
-#                print type(self.filelist[hash]["src"])
-                self.filelist[hash]["src"] +=1
-                self.filelist[hash]["complsrc"] +=1
-            else:
-                info["src"] = int(1)
-                info["complsrc"] = int(1)
-                self.filelist[hash] = info
-
             for i in range(tags):
                 tagcode = struct.unpack("!B", buf[index])[0]
                 index += 1
-                index += self.CtHandler[tagcode](self,buf[index:],hash)
-            print "search relt: ",self.filelist[hash]
+                relt = self.CtHandler[tagcode](self,buf[index:])
+                index += relt[0]
+                info[relt[1]] = relt[2]
+
+#            print info
+            print "ed2k://|file|",info["name"],"|",info["size"],"|",struct.unpack("16B",info["hash"]),"|/"
         pass
     def h_ReqFile(self,sock,buf):
         index = 0
@@ -443,74 +445,74 @@ class Ed2k:
     """
     CT Code Handler
     """
-    def hNICK(self,buf,hash):
+    def hNICK(self,buf):
         index = 0
         len = struct.unpack("!H", buf[index:index+2])[0]
         index += 2
         fmt = "!%ds" % len
         nick = struct.unpack(fmt,buf[index:index+len])[0]
-        self.userlist[hash]["nick"] = nick
-        return index+len
-    def hVERSION(self,buf,hash):
+#        self.userlist[hash]["nick"] = nick
+        return [index+len,"nick",nick]
+    def hVERSION(self,buf):
         ver = struct.unpack("!B", buf[0])[0]
-        self.userlist[hash]["version"] = ver
-        return 1
-    def hPORT(self,buf,hash):
+#        self.userlist[hash]["version"] = ver
+        return [1,"version",ver]
+    def hPORT(self,buf):
         port = struct.unpack("!H", buf[0:2])[0]
-        self.userlist[hash]["port"] = port
-        return 2
-    def hMULEVERSION(self,buf,hash):
+#        self.userlist[hash]["port"] = port
+        return [2,"port",port]
+    def hMULEVERSION(self,buf):
         mul = struct.unpack("!I", buf[0:4])[0]
-        self.userlist[hash]["muleversion"] = mul
-        return 4
-    def hFLAGS(self,buf,hash):
+#        self.userlist[hash]["muleversion"] = mul
+        return [4,"muleversion",mul]
+    def hFLAGS(self,buf):
         flags = struct.unpack("!B", buf[0])[0]
-        self.userlist[hash]["flags"] = flags
-        return 1
-    def hSERVERNAME(self,buf,hash):
+#        self.userlist[hash]["flags"] = flags
+        return [1,"flags",flags]
+    def hSERVERNAME(self,buf):
         index = 0
         len = struct.unpack("!H", buf[index:index+2])[0]
         index += 2
         fmt = "!%ds" % len
         name = struct.unpack(fmt,buf[index:index+len])[0]
-        self.serverlist[hash]["name"] = name
-        return index+len
-    def hSERVERDESC(self,buf,hash):
+#        self.serverlist[hash]["name"] = name
+        return [index+len,"name",name]
+    def hSERVERDESC(self,buf):
         index = 0
         len = struct.unpack("!H", buf[index:index+2])[0]
         index += 2
         fmt = "!%ds" % len
         desc = struct.unpack(fmt,buf[index:index+len])[0]
-        self.serverlist[hash]["desc"] = desc
-        return index+len
-    def hFILENAME(self,buf,hash):
+#        self.serverlist[hash]["desc"] = desc
+        return [index+len,"desc",desc]
+    def hFILENAME(self,buf):
         index = 0
         len = struct.unpack("!H", buf[index:index+2])[0]
         index += 2
         fmt = "!%ds" % len
-        str = struct.unpack(fmt,buf[index:index+len])[0]
-        self.filelist[hash]["name"] = str
-        return index+len
-    def hFILESIZE(self,buf,hash):
+        name = struct.unpack(fmt,buf[index:index+len])[0]
+#        self.filelist[hash]["name"] = name
+        return [index+len,"name",name]
+    def hFILESIZE(self,buf):
         size = struct.unpack("!I",buf[0:4])[0]
-        self.filelist[hash]["size"] = size
-        return 4
-    def hFILETYPE(self,buf,hash):
+#        self.filelist[hash]["size"] = size
+        return [4,"size",size]
+    def hFILETYPE(self,buf):
         index = 0
         len = struct.unpack("!H", buf[index:index+2])[0]
         index += 2
         fmt = "!%ds" % len
-        str = struct.unpack(fmt,buf[index:index+len])[0]
-        self.filelist[hash]["type"] = str
-        return index+len
-    def hSOURCES(self,buf,hash):
+        type = struct.unpack(fmt,buf[index:index+len])[0]
+#        self.filelist[hash]["type"] = str
+        return [index+len,"type",type]
+    def hSOURCES(self,buf):
         src = struct.unpack("!I",buf[0:4])[0]
-        self.filelist[hash]["src"] = src
-        return 4
-    def hCOMPLSRC(self,buf,hash):
+#        self.filelist[hash]["src"] = src
+        return [4,"src",src]
+    def hCOMPLSRC(self,buf):
         complsrc = struct.unpack("!I",buf[0:4])[0]
-        self.filelist[hash]["somplsrc"] = complsrc
-        return 4
+#        self.filelist[hash]["complsrc"] = complsrc
+        return [4,"complsrc",complsrc]
 
     #Tools
     def user_hash(self):
@@ -561,10 +563,10 @@ class Ed2k:
         return [fmt, CT_FILETYPE, len(type),type]
     def ct_SOURCES(self,src):
         fmt = "BI"
-        return [fmt, CT_FILESIZE, src]
+        return [fmt, CT_SOURCES, src]
     def ct_COMPLSRC(self,complsrc):
         fmt = "BI"
-        return [fmt, CT_FILESIZE, complsrc]
+        return [fmt, CT_COMPLSRC, complsrc]
     
     #OP Code To Handler
     OpHandler ={OP_LOGINREQUEST:hLoginRequest,
