@@ -16,7 +16,7 @@ from ED2K_BASE import *
 
     
 
-ed = ED2K.Ed2kClient()
+ed = ED2K.Ed2kClient(port=10001)
 ed.listen()
 sleep(1)
 ed.login(("localhost", SPORT))
@@ -26,7 +26,7 @@ ed.updateServerInfo()
 ed.offerFile()
 ed.offerFile()
 
-ed.search(".*1.*")
+ed.search(".*10.*")
 
 
 

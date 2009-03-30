@@ -271,39 +271,7 @@ class Ed2kClient(Ed2k):
     """
     client to client
     """
-    def op_Hello(self):
-        fmt = "!B16s4sHI"
-        li = [OP_HELLO]
-        li.append(self.GUID)
-        li.append(socket.inet_aton(socket.gethostbyname(self.host)))
-        li.append(self.port)
-        li.append(5)
-
-        buf = self.ct_NICK("YH_SCU")
-        fmt += buf[0]
-        li.extend(buf[1:])
-
-        buf = self.ct_VERSION()
-        fmt += buf[0]
-        li.extend(buf[1:])
-
-        buf = self.ct_PORT(self.port)
-        fmt += buf[0]
-        li.extend(buf[1:])
-
-        buf = self.ct_MULEVERSION(1234)
-        fmt += buf[0]
-        li.extend(buf[1:])
-
-        buf = self.ct_FLAGS(0)
-        fmt += buf[0]
-        li.extend(buf[1:])
-
-        li.append(fmt)
-#        print li
-#        return apply(struct.pack,(fmt,) + tuple(li))
-        return li
-        pass
+    
     def op_ReqFile(self,hash):
         fmt = "!B16H"
         li = [OP_REQFILE]

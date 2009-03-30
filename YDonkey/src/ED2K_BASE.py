@@ -65,6 +65,9 @@ CT_FILESIZE     = 0x32  #原为0x02
 CT_FILETYPE     = 0x33  #原为0x03
 CT_SOURCES      = 0x15
 CT_COMPLSRC     = 0x30
+CT_MODSTR       = 0x55
+CT_UDPPORTS     = 0xf9
+CT_MISCFEATURES = 0xfa
 
 #Flags
 FL_ZLIB         = 0x01
@@ -93,8 +96,8 @@ class Ed2k:
     port = None
     sock = None
     GUID = None
-    cnt_users = 100
-    cnt_files = 2000
+    cnt_users = 0
+    cnt_files = 0
 
     server_name = "YH 1# ED2K Server"
     server_desc = "Server Desc"
@@ -119,14 +122,14 @@ class Ed2k:
         """
         TODO:加入异常处理
         """
-        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.sock.bind(("localhost", self.port))
-        self.sock.listen(5)
-        print "listen on %d" % self.port
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.bind(("localhost", self.port))
+        sock.listen(5)
+        print threading.currentThread().getName(),"listen on %d" % self.port
         while 1:
-            infds, outfds, errfds = select.select([self.sock, ], [], [], 5)
+            infds, outfds, errfds = select.select([sock, ], [], [], 5)
             if len(infds) != 0:
-                csock, caddr = self.sock.accept()
+                csock, caddr = sock.accept()
 
                 t = threading.Thread(target = self.process,
                                         args = [csock,caddr])
@@ -149,7 +152,7 @@ class Ed2k:
 #            print "【%s】%s 【from】 %s " % (ctime(),repr(buf),addr)
             self.parser(sock,buf,len(buf))
 #            print "ok"
-#            sock.send("hello ansewr")
+#            sock.send("hello ansewr")"
         pass
     def parser(self,sock,buf,length):
         index = 0
@@ -177,7 +180,36 @@ class Ed2k:
             sock.send("answer")
             buf = sock.recv(1024)
             sleep(2)
-
+    def hello(self,addr):
+        th = threading.Thread(target = self.__hello,
+                                args = [addr]);
+        th.setName("Thread<hello>")
+        th.start()
+    def __hello(self,addr):
+        try:
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.connect(addr)
+        except socket.error, e:
+            print "can not connect"
+            sys.exit(1)
+        self.sock = sock
+        print threading.currentThread().getName(),"connected %s" % repr(addr)
+        buf = self.pack_ED2K(self.op_Hello())
+        sock.send(buf)
+#        print "send ok"
+        while 1:
+            try:
+#                sleep(10)
+                buf = sock.recv(1024)
+#                print "recv %s" %repr(buf)
+#                print "recv: %s" % repr(buf)
+                self.parser(sock,buf,len(buf))
+#                self.updateServerInfo(sock)
+#                self.offerFile(sock)
+#                self.search(sock,"searchexpr")
+            except socket.error, e:
+                self.error(e, "linkage interrupt")
+        pass
     def pack_ED2K(self,buf):
         fmt = "!BI"
         #print struct.calcsize(buf[-1])
@@ -216,6 +248,7 @@ class Ed2k:
             info[relt[1]] = relt[2]
         self.userlist[hash] = info
         print "userlist[hash] : ",self.userlist[hash]
+        self.cnt_users +=1
         sock.send(self.pack_ED2K(self.op_ServerMessage("I am Server Msg!")))
         sock.send(self.pack_ED2K(self.op_ServerStatus()))
 #        print repr(self.pack_ED2K(self.op_ServerStatus()))
@@ -299,6 +332,7 @@ class Ed2k:
                 info["src"] = int(1)
                 info["complsrc"] = int(1)
                 self.filelist[hash] = info
+                self.cnt_files += 1
 
 #            print self.filelist[hash]
 
@@ -308,6 +342,7 @@ class Ed2k:
                 relt = self.CtHandler[tagcode](self,buf[index:])
                 index += relt[0]
                 info[relt[1]] = relt[2]
+            
 #            print self.filelist[hash]
 #        for file in self.filelist:
 #            print self.filelist[file]
@@ -354,6 +389,54 @@ class Ed2k:
 #            print info
             print "ed2k://|file|",info["name"],"|",info["size"],"|",struct.unpack("16B",info["hash"]),"|/"
         pass
+
+    def h_Hello(self,sock,buf):
+        info = {"sock":sock}
+        index = 16
+        hash = struct.unpack("!16s",buf[0:index])[0]
+        ip = socket.inet_ntoa(struct.unpack("!4s", buf[index:index+4])[0])
+        index += 4
+        port = struct.unpack("!H", buf[index:index+2])[0]
+        index += 2
+        tags = struct.unpack("!I", buf[index:index+4])[0]
+        index += 4
+        info["ip"] = ip
+        info["port"] = port
+        info["hash"] = hash
+
+        for i in range(tags):
+            tagcode = struct.unpack("!B", buf[index])[0]
+            index += 1
+            relt = self.CtHandler[tagcode](self,buf[index:])
+            index += relt[0]
+            info[relt[1]] = relt[2]
+        self.userlist[hash] = info
+        print "userlist[hash] : ",self.userlist[hash]
+        self.cnt_users +=1
+        sock.send(self.pack_ED2K(self.op_HelloAnswer()))
+    def h_HelloAnswer(self,sock,buf):
+        info = {"sock":sock}
+        index = 1
+        hash = struct.unpack("!B",buf[0:index])[0]
+        #hash==0x0f 表示helloanswer
+        ip = socket.inet_ntoa(struct.unpack("!4s", buf[index:index+4])[0])
+        index += 4
+        port = struct.unpack("!H", buf[index:index+2])[0]
+        index += 2
+        tags = struct.unpack("!I", buf[index:index+4])[0]
+        index += 4
+        info["ip"] = ip
+        info["port"] = port
+#        info["hash"] = hash
+
+        for i in range(tags):
+            tagcode = struct.unpack("!B", buf[index])[0]
+            index += 1
+            relt = self.CtHandler[tagcode](self,buf[index:])
+            index += relt[0]
+            info[relt[1]] = relt[2]
+#        self.userlist[hash] = info
+        print "info : ",info
     def h_ReqFile(self,sock,buf):
         index = 0
         hash = struct.unpack("!16s",buf[index:index+16])[0]
@@ -513,6 +596,20 @@ class Ed2k:
         complsrc = struct.unpack("!I",buf[0:4])[0]
 #        self.filelist[hash]["complsrc"] = complsrc
         return [4,"complsrc",complsrc]
+    def hMODSTR(self,buf):
+        index = 0
+        len = struct.unpack("!H", buf[index:index+2])[0]
+        index += 2
+        fmt = "!%ds" % len
+        modstr = struct.unpack(fmt,buf[index:index+len])[0]
+        return [index+len,"modstr",modstr]
+    def hUDPPORTS(self,buf):
+        kad = struct.unpack("!H",buf[0:2])[0]
+        ed2k = struct.unpack("!H",buf[2:4])[0]
+        return [4,"kadudpport",kad,"ed2kudpport",ed2k]
+    def hMISCFEATURES(self,buf):
+        bitset = struct.unpack("!I",buf[0:4])[0]
+        return [4,"fetures",bitset]
 
     #Tools
     def user_hash(self):
@@ -567,7 +664,89 @@ class Ed2k:
     def ct_COMPLSRC(self,complsrc):
         fmt = "BI"
         return [fmt, CT_COMPLSRC, complsrc]
-    
+    def ct_MODSTR(self,str):
+        fmt = "BH%ds" % len(str)
+        return [fmt,CT_MODSTR,len(str),str]
+    def ct_UDPPORTS(self,kad,udp):
+        fmt = "BHH"
+        return [fmt,CT_UDPPORTS,kad,udp]
+    def ct_MISCFEATURES(self,bitset):
+        fmt = "BI"
+        return [fmt,CT_MISCFEATURES,bitset]
+
+    def op_Hello(self):
+        fmt = "!B16s4sHI"
+        li = [OP_HELLO]
+        li.append(self.GUID)
+        li.append(socket.inet_aton(socket.gethostbyname(self.host)))
+        li.append(self.port)
+        li.append(6)
+
+        buf = self.ct_NICK("YH_SCU")
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_VERSION()
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_PORT(self.port)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_MODSTR("ydonkey")
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_UDPPORTS(0,0)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_MISCFEATURES(1234)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        li.append(fmt)
+#        print li
+#        return apply(struct.pack,(fmt,) + tuple(li))
+        return li
+    def op_HelloAnswer(self):
+        fmt = "!BB4sHI"
+        li = [OP_HELLOANSWER]
+        li.append(0x0f)
+        li.append(socket.inet_aton(socket.gethostbyname(self.host)))
+        li.append(self.port)
+        li.append(6)
+
+        buf = self.ct_NICK("YH_SCU")
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_VERSION()
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_PORT(self.port)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_MODSTR("ydonkey")
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_UDPPORTS(0,0)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        buf = self.ct_MISCFEATURES(1234)
+        fmt += buf[0]
+        li.extend(buf[1:])
+
+        li.append(fmt)
+#        print li
+#        return apply(struct.pack,(fmt,) + tuple(li))
+        return li
+
     #OP Code To Handler
     OpHandler ={OP_LOGINREQUEST:hLoginRequest,
                 OP_SERVERMESSAGE:hServerMessage,
@@ -592,7 +771,9 @@ class Ed2k:
                 OP_QUEUERANKING:h_QueueRanking,
                 OP_REQCHUNKS:h_ReqChunks,
                 OP_SENDINGCHUNK:h_SendingChunk,
-                OP_CANCELTRANSFER:h_CancelTransfer}
+                OP_CANCELTRANSFER:h_CancelTransfer,
+                OP_HELLO:h_Hello,
+                OP_HELLOANSWER:h_HelloAnswer}
     #CT To Handler
     CtHandler ={CT_NICK:hNICK,
                 CT_VERSION:hVERSION,
@@ -605,4 +786,7 @@ class Ed2k:
                 CT_FILESIZE:hFILESIZE,
                 CT_FILETYPE:hFILETYPE,
                 CT_SOURCES:hSOURCES,
-                CT_COMPLSRC:hCOMPLSRC}
+                CT_COMPLSRC:hCOMPLSRC,
+                CT_MODSTR:hMODSTR,
+                CT_UDPPORTS:hUDPPORTS,
+                CT_MISCFEATURES:hMISCFEATURES}
