@@ -24,9 +24,9 @@ sleep(1)
 ed.updateServerInfo()
 #
 ed.offerFile()
-ed.offerFile()
 
-ed.search(".*10.*")
+
+
 
 
 

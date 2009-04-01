@@ -13,8 +13,10 @@ import ctypes
 import random
 import struct
 import sys
+import os
 from struct import unpack
 import re
+import binascii
 
 
 #Protocol Code
@@ -43,7 +45,7 @@ OP_REQFILE_NOFILE   = 0x48
 OP_REQHASHSET   = 0x51
 OP_HASHSET      = 0x52
 OP_STARTUPLOADREQ   = 0x54
-OP_ACCEPTUPLOADREQ  = 0x5c
+OP_ACCEPTUPLOADREQ  = 0x55
 OP_QUEUERANKING     = 0x5c
 OP_REQCHUNKS    = 0x47
 OP_SENDINGCHUNK = 0x46
@@ -87,8 +89,10 @@ FT_ED2K_IMAGE = "Image"
 FT_ED2K_DOCUMENT = "Doc"
 FT_ED2K_PROGRAM = "Pro"
 
-
-
+#Data length
+PART    = 9728000
+CHUNK   = 184320
+BLOCKS  = 10240
 
 
 class Ed2k:
@@ -107,7 +111,7 @@ class Ed2k:
     filelist    = {}
     filesrc     = {}
     file2user   = {}
-
+    socklist    = {}
 
 
     def __init__ (self, host, port):
@@ -146,13 +150,13 @@ class Ed2k:
 #        t.start()
         while 1:
             try:
-                buf = sock.recv(4096)
+                buf = sock.recv(4098)
             except socket.error, e:
                 self.error(e,"¡¨Ω”÷–∂œ")
 #            print "°æ%s°ø%s °æfrom°ø %s " % (ctime(),repr(buf),addr)
             self.parser(sock,buf,len(buf))
 #            print "ok"
-#            sock.send("hello ansewr")"
+#            self.send(sock,"hello ansewr")"
         pass
     def parser(self,sock,buf,length):
         index = 0
@@ -165,7 +169,7 @@ class Ed2k:
                 index += 4
                 opcode = struct.unpack("!B", buf[index])[0]
                 index += 1
-#                print opcode
+#                print "%x" % opcode
                 self.OpHandler[opcode](self,sock,buf[index:index+packlen])
                 index += packlen
 
@@ -177,9 +181,9 @@ class Ed2k:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.connect(("localhost", 5474))
         while 1:
-            sock.send("answer")
-            buf = sock.recv(1024)
-            sleep(2)
+            self.send(sock,"answer")
+            buf = sock.recv(200000)
+            sleep(1)
     def hello(self,addr):
         th = threading.Thread(target = self.__hello,
                                 args = [addr]);
@@ -192,15 +196,19 @@ class Ed2k:
         except socket.error, e:
             print "can not connect"
             sys.exit(1)
-        self.sock = sock
+        self.clientlist[addr]["sock"] = sock
+
         print threading.currentThread().getName(),"connected %s" % repr(addr)
         buf = self.pack_ED2K(self.op_Hello())
-        sock.send(buf)
+        print type(addr),addr
+        self.clientlist[addr]["status"] = "hello"
+#        print self.clientlist[addr]
+        self.send(sock,buf)
 #        print "send ok"
         while 1:
             try:
 #                sleep(10)
-                buf = sock.recv(1024)
+                buf = sock.recv(200000)
 #                print "recv %s" %repr(buf)
 #                print "recv: %s" % repr(buf)
                 self.parser(sock,buf,len(buf))
@@ -209,6 +217,10 @@ class Ed2k:
 #                self.search(sock,"searchexpr")
             except socket.error, e:
                 self.error(e, "linkage interrupt")
+        pass
+    def send(self,sock,buf):
+        length = sock.send(buf)
+#        print "sended :",length
         pass
     def pack_ED2K(self,buf):
         fmt = "!BI"
@@ -249,10 +261,10 @@ class Ed2k:
         self.userlist[hash] = info
         print "userlist[hash] : ",self.userlist[hash]
         self.cnt_users +=1
-        sock.send(self.pack_ED2K(self.op_ServerMessage("I am Server Msg!")))
-        sock.send(self.pack_ED2K(self.op_ServerStatus()))
+        self.send(sock,self.pack_ED2K(self.op_ServerMessage("I am Server Msg!")))
+        self.send(sock,self.pack_ED2K(self.op_ServerStatus()))
 #        print repr(self.pack_ED2K(self.op_ServerStatus()))
-        sock.send(self.pack_ED2K(self.op_IDChange(self.client_hash(sock.getpeername()[0]))))
+        self.send(sock,self.pack_ED2K(self.op_IDChange(self.client_hash(sock.getpeername()[0]))))
 #        print repr(self.pack_ED2K(self.op_IDChange(self.client_hash(sock.getpeername()[0]))))
 
     def hServerMessage(self,sock,buf):
@@ -275,7 +287,7 @@ class Ed2k:
     def hServerList(self,sock,buf):
         pass
     def hGetServerList(self,sock,buf):
-        sock.send(self.pack_ED2K(self.op_ServerIdent()))
+        self.send(sock,self.pack_ED2K(self.op_ServerIdent()))
         pass
     def hServerIdent(self,sock,buf):
         info = {}
@@ -358,7 +370,7 @@ class Ed2k:
             if m :
                 relt.append(file)
                 print "match search: ",m.group()
-        sock.send(self.pack_ED2K(self.op_SearchResult(relt)))
+        self.send(sock,self.pack_ED2K(self.op_SearchResult(relt)))
 #        print "SearchExpr :: %s" % expr
     def hSearchResult(self,sock,buf):
         index = 0
@@ -386,8 +398,14 @@ class Ed2k:
                 index += relt[0]
                 info[relt[1]] = relt[2]
 
+            self.downloadlist[hash] = {}
+            self.downloadlist[hash]["hash"] = hash
+            self.downloadlist[hash]["name"] = info["name"]
+            self.downloadlist[hash]["size"] = info["size"]
+            self.downloadlist[hash]["type"] = info["type"]
 #            print info
-            print "ed2k://|file|",info["name"],"|",info["size"],"|",struct.unpack("16B",info["hash"]),"|/"
+#            self.download((ip,port),info["hash"])
+            print "ed2k://|file|",info["name"],"|",info["size"],"|",binascii.b2a_hex(info["hash"]),"|/"
         pass
 
     def h_Hello(self,sock,buf):
@@ -413,7 +431,7 @@ class Ed2k:
         self.userlist[hash] = info
         print "userlist[hash] : ",self.userlist[hash]
         self.cnt_users +=1
-        sock.send(self.pack_ED2K(self.op_HelloAnswer()))
+        self.send(sock,self.pack_ED2K(self.op_HelloAnswer()))
     def h_HelloAnswer(self,sock,buf):
         info = {"sock":sock}
         index = 1
@@ -427,7 +445,7 @@ class Ed2k:
         index += 4
         info["ip"] = ip
         info["port"] = port
-#        info["hash"] = hash
+        info["hash"] = hash
 
         for i in range(tags):
             tagcode = struct.unpack("!B", buf[index])[0]
@@ -436,12 +454,19 @@ class Ed2k:
             index += relt[0]
             info[relt[1]] = relt[2]
 #        self.userlist[hash] = info
-        print "info : ",info
+        self.clientlist[(ip,port)]["status"] = "helloanswer"
+#        print "info : ",info
     def h_ReqFile(self,sock,buf):
         index = 0
         hash = struct.unpack("!16s",buf[index:index+16])[0]
         index +=16
-        print hash
+#        print "reqfile :",repr(hash)
+        print "reqfile"
+        if hash not in self.filelist:
+            self.send(sock,self.pack_ED2K(self.op_ReqFile_NoFile(hash)))
+        else:
+            self.send(sock,self.pack_ED2K(self.op_FileName(hash,self.filelist[hash]["name"])))
+            self.send(sock,self.pack_ED2K(self.op_FileDesc(100,"filecomment")))
     def h_FileName(self,sock,buf):
         index = 0
         hash = struct.unpack("!16s",buf[index:index+16])[0]
@@ -450,6 +475,7 @@ class Ed2k:
         index += 4
         fmt = "!%ds" % len
         name = struct.unpack(fmt,buf[index:index+len])[0]
+        print repr(hash),name
     def h_FileDesc(self,sock,buf):
         index = 0
         rating = struct.unpack("!B",buf[index:index+1])[0]
@@ -458,6 +484,7 @@ class Ed2k:
         index += 4
         fmt = "!%ds" % len
         comment = struct.unpack(fmt,buf[index:index+len])[0]
+        print rating,comment
     def h_SetReqFileID(self,sock,buf):
         index = 0
         hash = struct.unpack("!16s",buf[index:index+16])[0]
@@ -473,6 +500,7 @@ class Ed2k:
         index = 0
         hash = struct.unpack("!16s",buf[index:index+16])[0]
         index +=16
+        print "nofile :",hash
         pass
     def h_ReqHashSet(self,sock,buf):
         index = 0
@@ -489,38 +517,71 @@ class Ed2k:
         index = 0
         hash = struct.unpack("!16s",buf[index:index+16])[0]
         index +=16
+        if hash in self.filelist:
+            self.send(sock,self.pack_ED2K(self.op_AcceptUploadReq()))
+            self.send(sock,self.pack_ED2K(self.op_QueueRanking(1)))
+        else:
+            self.send(sock,self.pack_ED2K(self.op_ReqFile_NoFile(hash)))
     def h_AcceptUploadReq(self,sock,buf):
+        addr = sock.getpeername()
+        self.clientlist[addr]["status"] = "acceptupload"
+#        print "acceptUoloadReq"
         pass
     def h_QueueRanking(self,sock,buf):
         index = 0
         ranking = struct.unpack("!I",buf[index:index+4])[0]
         index +=4
+        print "ranking : ",ranking
         pass
-    def h_ReqChunks(selfm,sock,buf):
+    def h_ReqChunks(self,sock,buf):
         index = 0
         hash = struct.unpack("!16s",buf[index:index+16])[0]
         index +=16
         begins = []
         ends = []
         for i in range(3):
-            begin = struct.unpack("!16s",buf[index:index+4])[0]
+            begin = struct.unpack("!I",buf[index:index+4])[0]
             index +=4
             begins.append(begin)
         for i in range(3):
-            end = struct.unpack("!16s",buf[index:index+4])[0]
+            end = struct.unpack("!I",buf[index:index+4])[0]
             index +=4
-            begins.append(end)
+            ends.append(end)
+        
+        fname =  self.ShareFolder+self.filelist[hash]["name"]
+        size = ends[0]-begins[0]
+        fd = open(fname,'r')
+        fd.seek(begins[0])
+        chunk = fd.read(CHUNK)
+        print len(chunk)," ",size
+        self.send(sock,self.pack_ED2K(self.op_SendingChunk(hash,begins[0],ends[0],chunk)))
+        fd.close()
+        print "req Chunks: ",repr(hash),begins,ends
         pass
     def h_SendingChunk(self,sock,buf):
         index = 0
         hash = struct.unpack("!16s",buf[index:index+16])[0]
         index +=16
-        begin = struct.unpack("!16s",buf[index:index+4])[0]
+        begin = struct.unpack("!I",buf[index:index+4])[0]
         index +=4
-        end = struct.unpack("!16s",buf[index:index+4])[0]
+        end = struct.unpack("!I",buf[index:index+4])[0]
         index +=4
-        fmt = "!%ds" % (end-begin)
-        data = struct.unpack(fmt,buf[index:index+end-begin])[0]
+#        print end-begin," ",len(buf[index:])
+
+        fmt = "!%ds" % len(buf[index:])
+        data = struct.unpack(fmt,buf[index:])[0]
+        print "recv blocks :",len(data)
+#        print self.downloadlist[hash]
+        fname = self.TempFolder+self.downloadlist[hash]["name"]
+        fd = open(fname,'r+b')
+        
+        fd.seek(begin,os.SEEK_SET)
+        t = fd.tell()
+#        print (end-begin),"   ",fd.tell()," ",len(data)
+        fd.write(data)
+#        print (fd.tell()-t)
+        fd.close()
+#        print "chunks :",data
     def h_CancelTransfer(self,sock,buf):
         pass
 

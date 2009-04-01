@@ -104,7 +104,13 @@ class Ed2kServer(Ed2k):
 
 
 class Ed2kClient(Ed2k):
-    def __init__ (self, host = '', port = None):
+
+    clientlist = {}
+    downloadlist = {}
+    ShareFolder = "d:\\download\\"
+    TempFolder  = "d:\\temp\\"
+    
+    def __init__ (self, host = 'localhost', port = None):
         if not port:
             port = random.randint(10000,15000)
         Ed2k.__init__(self,host,port)
@@ -128,7 +134,7 @@ class Ed2kClient(Ed2k):
         self.sock = sock
         print "connected %s" % repr(addr)
         buf = self.pack_ED2K(self.op_LoginRequset())
-        sock.send(buf)
+        self.send(sock,buf)
 #        print "send ok"
         while 1:
             try:
@@ -149,14 +155,14 @@ class Ed2kClient(Ed2k):
         self.__updateServerInfo(self.sock)
         
     def __updateServerInfo(self,sock):
-        sock.send(self.pack_ED2K(self.op_GetServerList()))
+        self.send(sock,self.pack_ED2K(self.op_GetServerList()))
 
 
     def __initFileTable(self):
-        ShareFolder = "d:\download\\"
-        for root,dirs,files in os.walk(ShareFolder):
+        
+        for root,dirs,files in os.walk(self.ShareFolder):
             for file in files:
-                finfo = self.path2file(ShareFolder,file)
+                finfo = self.path2file(self.ShareFolder,file)
                 self.filelist[finfo["hash"]] = finfo
 
         pass
@@ -178,14 +184,43 @@ class Ed2kClient(Ed2k):
         DONE:将offerfile改成多多文件同发的
         """
         self.__initFileTable()
-        sock.send(self.pack_ED2K(self.op_OfferFiles(self.filelist)))
+        self.send(sock,self.pack_ED2K(self.op_OfferFiles(self.filelist)))
 
     def search(self,expr):
         self.__search(self.sock,expr)
     def __search(self,sock,expr):
-        sock.send(self.pack_ED2K(self.op_Search(expr)))
+        self.send(sock,self.pack_ED2K(self.op_Search(expr)))
 
-    def download(self,file):
+    def download(self,addr,filehash):
+        print self.downloadlist[filehash]
+        self.clientlist[addr] = {}
+        self.hello(addr)
+#        print "filehash",repr(filehash)
+        sleep(2)
+        print self.clientlist[addr]
+        if self.clientlist[addr]["status"] =="helloanswer" :
+            sock = self.clientlist[addr]["sock"]
+            self.send(sock,self.pack_ED2K(self.op_ReqFile(filehash)))
+        else:
+            print addr,"无连接"
+        sleep(1)
+        self.send(sock,self.pack_ED2K(self.op_StartUploadReq(filehash)))
+        self.clientlist[addr]["status"] = "uploadreq"
+        sleep(1)
+        print self.clientlist[addr]
+
+        if self.clientlist[addr]["status"] =="acceptupload" :            
+#            print TempFolder+self.downloadlist[filehash]["name"]
+            fd = open(self.TempFolder+self.downloadlist[filehash]["name"],'w')
+            size = self.downloadlist[filehash]["size"]
+            fd.truncate(size)
+            fd.close()
+            chunks = size/CHUNK+1
+            for i in range(chunks):
+                self.send(sock,self.pack_ED2K(self.op_ReqChunks(filehash,[i*CHUNK,0,0],[(i+1)*CHUNK,0,0])))
+                sleep(1)
+        else:
+            print "下载请求失败"
         pass
         
         
@@ -273,9 +308,9 @@ class Ed2kClient(Ed2k):
     """
     
     def op_ReqFile(self,hash):
-        fmt = "!B16H"
+        fmt = "!B16s"
         li = [OP_REQFILE]
-        li.extend(hash)
+        li.append(hash)
         li.append(fmt)
         return li
     def op_SetReqFileID(self,hash):
@@ -291,12 +326,12 @@ class Ed2kClient(Ed2k):
         li.append(fmt)
         return li
     def op_StartUploadReq(self,hash):
-        fmt = "!B16H"
+        fmt = "!B16s"
         li = [OP_STARTUPLOADREQ,hash]
         li.append(fmt)
         return li
     def op_ReqChunks(self,hash,begin,end):
-        fmt = "!B16H"
+        fmt = "!B16s"
         li = [OP_REQCHUNKS,hash]
         fmt += "6I"
         li.extend(begin)
@@ -305,19 +340,19 @@ class Ed2kClient(Ed2k):
         return li
 
     def op_FileName(self,hash,name):
-        fmt = "!B16HI%ds" % len(name)
+        fmt = "!B16sI%ds" % len(name)
         li = [OP_FILENAME,hash,len(name),name]
         li.append(fmt)
         return li
     def op_FileDesc(self,rating,comment):
-        fmt = "!BHI%ds" % len(comment)
+        fmt = "!BBI%ds" % len(comment)
         li = [OP_FILEDESC,rating,len(comment),comment]
         li.append(fmt)
         return li
     def op_ReqFile_Status(self,hash,partmap):
         pass
     def op_ReqFile_NoFile(self,hash):
-        fmt = "!B16H"
+        fmt = "!B16s"
         li = [OP_REQFILE_NOFILE,hash]
         li.append(fmt)
         return li
@@ -337,11 +372,11 @@ class Ed2kClient(Ed2k):
 
     def op_QueueRanking(self,rank):
         fmt = "!BI"
-        li = [OP_ACCEPTUPLOADREQ,rank]
+        li = [OP_QUEUERANKING,rank]
         li.append(fmt)
         return li
     def op_SendingChunk(self,hash,begin,end,data):
-        fmt = "!B16HII%ds" % len(data)
+        fmt = "!B16sII%ds" % len(data)
         li = [OP_SENDINGCHUNK,hash,begin,end,data]
         li.append(fmt)
         return li

@@ -11,7 +11,7 @@ port = 9999
 s = socket(AF_INET, SOCK_STREAM)
 s.bind((host,port))
 s.listen(5)
-
+#print "ip : ",s.getpeername()
 addr = gethostbyname("localhost")
 print type(addr)
 print type(inet_aton(addr))
