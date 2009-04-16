@@ -189,6 +189,7 @@ class Ed2k:
                                 args = [addr]);
         th.setName("Thread<hello>")
         th.start()
+
     def __hello(self,addr):
         try:
             sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -200,7 +201,7 @@ class Ed2k:
 
         print threading.currentThread().getName(),"connected %s" % repr(addr)
         buf = self.pack_ED2K(self.op_Hello())
-        print type(addr),addr
+#        print type(addr),addr
         self.clientlist[addr]["status"] = "hello"
 #        print self.clientlist[addr]
         self.send(sock,buf)
@@ -524,8 +525,10 @@ class Ed2k:
             self.send(sock,self.pack_ED2K(self.op_ReqFile_NoFile(hash)))
     def h_AcceptUploadReq(self,sock,buf):
         addr = sock.getpeername()
+        print self.clientlist[addr]
         self.clientlist[addr]["status"] = "acceptupload"
-#        print "acceptUoloadReq"
+        print self.clientlist[addr]
+        print "acceptUoloadReq"
         pass
     def h_QueueRanking(self,sock,buf):
         index = 0

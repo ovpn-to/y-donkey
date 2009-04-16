@@ -107,8 +107,8 @@ class Ed2kClient(Ed2k):
 
     clientlist = {}
     downloadlist = {}
-    ShareFolder = "d:\\download\\"
-    TempFolder  = "d:\\temp\\"
+    ShareFolder = "share/"
+    TempFolder  = "temp/"
     
     def __init__ (self, host = 'localhost', port = None):
         if not port:
@@ -186,8 +186,7 @@ class Ed2kClient(Ed2k):
         self.__initFileTable()
         self.send(sock,self.pack_ED2K(self.op_OfferFiles(self.filelist)))
 
-    def search(self,expr):
-        self.__search(self.sock,expr)
+    def search(self,expr): self.__search(self.sock,expr)
     def __search(self,sock,expr):
         self.send(sock,self.pack_ED2K(self.op_Search(expr)))
 
@@ -195,9 +194,10 @@ class Ed2kClient(Ed2k):
         print self.downloadlist[filehash]
         self.clientlist[addr] = {}
         self.hello(addr)
-#        print "filehash",repr(filehash)
-        sleep(2)
+        print "filehash",repr(filehash)
+        sleep(1)
         print self.clientlist[addr]
+
         if self.clientlist[addr]["status"] =="helloanswer" :
             sock = self.clientlist[addr]["sock"]
             self.send(sock,self.pack_ED2K(self.op_ReqFile(filehash)))
@@ -205,8 +205,8 @@ class Ed2kClient(Ed2k):
             print addr,"无连接"
         sleep(1)
         self.send(sock,self.pack_ED2K(self.op_StartUploadReq(filehash)))
-        self.clientlist[addr]["status"] = "uploadreq"
-        sleep(1)
+#        self.clientlist[addr]["status"] = "uploadreq"
+        sleep(2)
         print self.clientlist[addr]
 
         if self.clientlist[addr]["status"] =="acceptupload" :            
@@ -215,12 +215,12 @@ class Ed2kClient(Ed2k):
             size = self.downloadlist[filehash]["size"]
             fd.truncate(size)
             fd.close()
-            chunks = size/CHUNK+1
+            chunks = size/BLOCKS+1
             for i in range(chunks):
-                self.send(sock,self.pack_ED2K(self.op_ReqChunks(filehash,[i*CHUNK,0,0],[(i+1)*CHUNK,0,0])))
+                self.send(sock,self.pack_ED2K(self.op_ReqChunks(filehash,[i*BLOCKS,0,0],[(i+1)*BLOCKS,0,0])))
                 sleep(1)
         else:
-            print "下载请求失败"
+            print "error:","下载请求失败"
         pass
         
         
