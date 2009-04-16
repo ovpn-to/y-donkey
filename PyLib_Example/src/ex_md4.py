@@ -11,7 +11,7 @@ import hashlib
 
 md4 = hashlib.new("md4")
 
-f = open("1.pdf","rb")
+f = open("database","rb")
 while 1:
     date = f.read(9280000)
     if not date:break
@@ -21,7 +21,7 @@ f.close
 
 
 #md4.update("hello")
-095d3989c42f1b124fa59cee5d206d4a
+#095d3989c42f1b124fa59cee5d206d4a
 
 
 print md4.block_size
